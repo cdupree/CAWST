@@ -21,7 +21,27 @@ Z = comma delimited list of short hostnames (eg, web1,db1)
 import sys
 import getopt
 
+
+from boto.ec2.connection import EC2Connection
+
+
 def poll(accId, secKey, hostArr ):
+
+	# TODO: Error checking?
+	conn = EC2Connection(accId, secKey)
+
+	# TODO: config file items
+	ami = "ami-31814f58"
+	ssh = "cawst"
+	instance = "m1.small"
+	secGroup = "cawst"
+
+	for host in hostArr:
+		conn.run_instances(
+			ami,
+			key_name = ssh,
+			instance_type = instance,
+			security_groups = [secGroup])
 
 	return 0
 

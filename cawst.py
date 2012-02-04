@@ -24,24 +24,42 @@ import getopt
 
 from boto.ec2.connection import EC2Connection
 
+def getConn(accId, secKey):
+	return  EC2Connection(accId, secKey)
 
-def poll(accId, secKey, hostArr ):
-
-	# TODO: Error checking?
-	conn = EC2Connection(accId, secKey)
-
+def startMachine(conn, host):
 	# TODO: config file items
+	# TODO: make key be dynamic, and upload with import_key_pair
 	ami = "ami-31814f58"
 	ssh = "cawst"
 	instance = "m1.small"
 	secGroup = "cawst"
 
+	conn.run_instances(
+		ami,
+		key_name = ssh,
+		instance_type = instance,
+		security_groups = [secGroup],
+		client_token = host)
+
+def hostExistsInAWS(conn,host):
+	hdict = dict([('client_token',host)])
+
+	return conn.get_all_instances(instance_ids=None, filters=hdict)
+
+def poll(accId, secKey, hostArr ):
+
+	# TODO:  Still Error Checking 
+	conn =  getConn(accId,secKey)
+
 	for host in hostArr:
-		conn.run_instances(
-			ami,
-			key_name = ssh,
-			instance_type = instance,
-			security_groups = [secGroup])
+		hostExists = hostExistsInAWS(conn,host)
+		if not hostExists:
+			print 'starting host ',host
+			startMachine(conn,host)
+		else:
+			print 'host ', host,' exists'
+			# start_instance("instance_id")
 
 	return 0
 

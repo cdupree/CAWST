@@ -59,7 +59,13 @@ def poll(accId, secKey, hostArr ):
 			startMachine(conn,host)
 		else:
 			print 'host ', host,' exists'
-			# start_instance("instance_id")
+			if hostExists[0].instances[0].update() == "terminated":
+				print 'host ', host, ' is not running, so I will start it'
+				# Not working with terminated?
+				hostExists[0].instances[0].reboot()
+				#startMachine(conn,host)
+			else:
+				print 'host ', host, ' is running'
 
 	return 0
 

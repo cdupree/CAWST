@@ -23,9 +23,18 @@ file which you may provide as a command line argument
 
 import sys
 import getopt
+import random
 
 
 from boto.ec2.connection import EC2Connection
+
+
+class Host:
+	def __init__(self,name,instance = None):
+		self.name = name
+
+		if instance is not None:
+			self.instance = instance
 
 def getConn(accId, secKey):
 	return  EC2Connection(accId, secKey)
@@ -37,13 +46,40 @@ def startMachine(conn, host):
 	ssh = "cawst"
 	instance = "m1.small"
 	secGroup = "cawst"
+	# make this unique so that we have a way to check a host.  Need to look
+	# at host data which we can set via the web, and determine how to  set it
+	# with boto.
+	token = host + "-" + random.random().__str__()
 
-	conn.run_instances(
+	reservation  = conn.run_instances(
 		ami,
 		key_name = ssh,
 		instance_type = instance,
 		security_groups = [secGroup],
-		client_token = host)
+		client_token = token)
+
+	return reservation.instances[0]
+
+def getRunningInstances(conn):
+
+	running = 0
+	hosts = dict()
+	reservations = conn.get_all_instances()
+
+	for resv in reservations:
+		instances = resv.instances
+		for inst in instances:
+			# TODO: Check also for pending.
+			if inst.update() == "running":
+				token = inst.client_token
+				name =  token.split('-')[0]
+				host = Host(name,inst)
+				hosts[name] = host
+
+	return hosts
+
+# instance variables are:
+#{'kernel': u'aki-805ea7e9', 'root_device_type': u'ebs', 'private_dns_name': '', 'previous_state': None, 'spot_instance_request_id': None, 'hypervisor': u'xen', 'id': u'i-afc747ca', 'state_reason': {u'message': u'pending', u'code': u'pending'}, 'monitored': False, 'item': u'\n        ', 'subnet_id': None, 'block_device_mapping': {}, 'instance_class': None, 'shutdown_state': None, 'group_name': None, 'state': u'pending', 'client_token': '', '_in_monitoring_element': False, 'architecture': u'i386', 'ramdisk': None, 'virtualizationType': u'paravirtual', 'tags': {}, 'key_name': u'cawst', 'image_id': u'ami-31814f58', 'reason': '', 'groups': [<boto.ec2.instance.Group instance at 0xed78638>], 'public_dns_name': '', 'monitoring': u'\n            ', 'requester_id': None, 'state_code': 0, 'ip_address': None, 'placement': u'us-east-1b', 'ami_launch_index': u'0', 'dns_name': '', 'region': RegionInfo:us-east-1, 'launch_time': u'2012-02-05T16:44:12.000Z', 'persistent': False, 'instance_type': u'm1.small', 'connection': EC2Connection:ec2.amazonaws.com, 'root_device_name': u'/dev/sda1', 'instanceState': u'\n            ', 'private_ip_address': None, 'vpc_id': None, 'product_codes': []}
 
 def hostExistsInAWS(conn,host):
 	hdict = dict([('client_token',host)])
@@ -51,24 +87,22 @@ def hostExistsInAWS(conn,host):
 	return conn.get_all_instances(instance_ids=None, filters=hdict)
 
 def poll(accId, secKey, hostArr ):
-
 	# TODO:  Still Error Checking 
 	conn =  getConn(accId,secKey)
 
-	for host in hostArr:
-		hostExists = hostExistsInAWS(conn,host)
-		if not hostExists:
-			print 'starting host ',host
-			startMachine(conn,host)
-		else:
-			print 'host ', host,' exists'
-			if hostExists[0].instances[0].update() == "terminated":
-				print 'host ', host, ' is not running, so I will start it'
-				# Not working with terminated?
-				hostExists[0].instances[0].reboot()
-				#startMachine(conn,host)
-			else:
-				print 'host ', host, ' is running'
+	runningMachines = getRunningInstances(conn)
+
+
+	for hname in hostArr:
+		if hname not in runningMachines:
+			print hname + " is not running, so I will start it."
+			inst = startMachine(conn,hname)
+			host = Host(hname,inst)
+			runningMachines[hname] = host 
+
+	# Now loop over machines to do things with them.
+	for h in runningMachines.keys():
+		print h
 
 	return 0
 
@@ -134,9 +168,6 @@ def main(argv=None):
 				else:
 					hostArr = a.split(',')
 
-		print accId
-		print secKey
-		print hostArr
 
 		# Now we have options, so make sure that we got good ones, or bail.
 		# TODO: Better checks to make sure host names, are legit.  Namely,

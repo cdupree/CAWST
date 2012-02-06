@@ -19,7 +19,10 @@ file which you may provide as a command line argument
 
 """
 
-# TODO: Better Unit Tests.
+# TODO: Better Unit Tests, and Error checking.
+# TODO: Cache instance information for restarts.
+# TODO: Add role to config file / cl options so that Fabric knows how
+#       to set up nodes.
 
 import sys
 import getopt
@@ -29,6 +32,8 @@ import time
 
 from boto.ec2.connection import EC2Connection
 
+from fabric.api import *
+from fabric.operations import put
 
 class Host:
 	def __init__(self,name,instance = None):
@@ -48,6 +53,9 @@ class Host:
 
 	def getState(self):
 		return self.instance.update() 
+
+	def getKey(self):
+		return self.instance.key_name
 
 def getConn(accId, secKey):
 	return  EC2Connection(accId, secKey)
@@ -129,13 +137,32 @@ def poll(accId, secKey, hostArr ):
 			print "Yes!  Ready to continue"
 
 		
+	etchosts = "127.0.0.1   localhost localhost.localdomain\n"
 
 	# Now loop over machines to do things with them.
-	for h in runningMachines.values():
-		print h.getState()
-		print h.getPublicDNS()
-		print h.getPrivateDNS()
-		print h.getPrivateIP()
+	for host in runningMachines.values():
+		print "Use: "
+		print "\tssh -i %s.pem ec2-user@%s" % (host.getKey(), host.getPublicDNS())
+		print "if you would like to log in to: %s\n" % host.name
+
+
+		# add to /etc/hosts
+		etchosts += "%s\t%s\n" % (host.getPrivateIP(),host.name)
+
+	fout = open("hosts","w")
+	fout.write(etchosts)
+	fout.close()
+
+	for host in runningMachines.values():
+		# upload via fabric
+		env.user = "ec2-user"
+		env.disable_known_hosts = True
+		env.host_string="ec2-user@%s" % host.getPublicDNS()
+		print host.getKey()
+		env.key_filename = "./%s.pem" % host.getKey()
+
+		put('hosts', "/etc/hosts", use_sudo=True, 
+		 	mirror_local_mode=False, mode=None)
 
 	return 0
 

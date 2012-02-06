@@ -24,6 +24,7 @@ file which you may provide as a command line argument
 import sys
 import getopt
 import random
+import time
 
 
 from boto.ec2.connection import EC2Connection
@@ -35,6 +36,18 @@ class Host:
 
 		if instance is not None:
 			self.instance = instance
+
+	def getPublicDNS(self):
+		return self.instance.public_dns_name
+
+	def getPrivateDNS(self):
+		return self.instance.private_dns_name
+
+	def getPrivateIP(self):
+		return self.instance.private_ip_address
+
+	def getState(self):
+		return self.instance.update() 
 
 def getConn(accId, secKey):
 	return  EC2Connection(accId, secKey)
@@ -89,9 +102,9 @@ def hostExistsInAWS(conn,host):
 def poll(accId, secKey, hostArr ):
 	# TODO:  Still Error Checking 
 	conn =  getConn(accId,secKey)
+	hQueue = list()
 
 	runningMachines = getRunningInstances(conn)
-
 
 	for hname in hostArr:
 		if hname not in runningMachines:
@@ -99,10 +112,30 @@ def poll(accId, secKey, hostArr ):
 			inst = startMachine(conn,hname)
 			host = Host(hname,inst)
 			runningMachines[hname] = host 
+			hQueue.append(host)
+
+	if hQueue.__len__() != 0:
+		print "sleeping 30 seconds to give new hosts time to spin up"
+		time.sleep(60)
+
+	# check one last time.
+	while hQueue.__len__() != 0:
+		host = hQueue.pop()
+		print "checking on last time.  Is %s up?" % host.name
+		if host.getState() != "running":
+			print "No!  Please wait and re-run script"
+			return
+		else: 
+			print "Yes!  Ready to continue"
+
+		
 
 	# Now loop over machines to do things with them.
-	for h in runningMachines.keys():
-		print h
+	for h in runningMachines.values():
+		print h.getState()
+		print h.getPublicDNS()
+		print h.getPrivateDNS()
+		print h.getPrivateIP()
 
 	return 0
 
